@@ -7,7 +7,7 @@ class LGModel():
 
     def logistic_regression(self,features,gold_labels,alpha,epochs,batch_size):
         #logistic regression with gradient descent using minibatching
-        model = SGDClassifier(loss='log_loss',penalty='l2',alpha=alpha,learning_rate="constant",eta0=0.001)
+        model = SGDClassifier(loss='log_loss',penalty='l2',alpha=alpha,learning_rate="optimal")
         log_losses = []
         loss_01 = []
         for i in range(epochs):

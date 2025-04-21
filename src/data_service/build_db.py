@@ -46,4 +46,4 @@ def save_matches_list(matches: list[dict]):
 
 def get_saved_matches():
     entries = list(collection.find(projection={"_id":0,"dire_team":1,"radiant_team":1, "radiant_win":1}))
-    return np.array([data["dire_team"]+data["radiant_team"] for data in entries]), np.array([int(data["radiant_win"]) for data in entries])
+    return entries, np.array([int(data["radiant_win"]) for data in entries])
