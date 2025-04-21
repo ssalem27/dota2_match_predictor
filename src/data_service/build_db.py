@@ -5,9 +5,11 @@ from pymongo.mongo_client import MongoClient
 from pymongo.operations import UpdateOne
 from data_service.retrieve_data import get_matches
 import numpy as np
+import certifi
 
 
 dotenv.load_dotenv()
+certifi.where()
 
 CLIENT_URL = os.environ["CLIENT_URL"]
 DB_NAME = os.environ["DB_NAME"]
