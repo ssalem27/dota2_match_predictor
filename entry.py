@@ -1,5 +1,5 @@
-from data_service.build_db import *
-from models.logistic_regression import LGModel
+from dota2_predictor.data_service.build_db import *
+from dota2_predictor.models.logistic_regression import LGModel
 import time
 import traceback
 from sklearn.model_selection import train_test_split

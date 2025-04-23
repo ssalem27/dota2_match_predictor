@@ -3,7 +3,7 @@ from pymongo.database import Database
 from pymongo.collection import Collection
 from pymongo.mongo_client import MongoClient
 from pymongo.operations import UpdateOne
-from data_service.retrieve_data import get_matches
+from dota2_predictor.data_service.retrieve_data import get_matches
 import numpy as np
 import certifi
 

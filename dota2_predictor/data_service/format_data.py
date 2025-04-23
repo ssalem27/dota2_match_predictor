@@ -1,4 +1,4 @@
-from data_service.build_db import get_saved_matches
+from dota2_predictor.data_service.build_db import get_saved_matches
 import numpy as np
 import data_service.consts as consts
 import torch
