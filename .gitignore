@@ -1,4 +1,4 @@
 venv/
 */*/__pycache__/
 */__pycache__/
-src/dota2_predictor.egg-info
+dota2_predictor/dota2_predictor.egg-info

@@ -9,4 +9,4 @@ description = "Dota 2 match outcome prediction"
 
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["dota2_predictor"]
