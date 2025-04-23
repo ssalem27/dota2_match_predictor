@@ -13,20 +13,22 @@ class NNModel(nn.Module):
         super().__init__()
         self.hidden = nn.Linear(input_dim,3*input_dim)
         self.relu = nn.ReLU()
+        self.dropout = nn.Dropout()
         self.output = nn.Linear(3*input_dim,1)
         self.sigmoid = nn.Sigmoid()
         
     def forward(self,feature):
         feature = self.relu(self.hidden(feature))
-        feature = self.sigmoid(self.output(feature))
+        feature = self.dropout(feature)
+        feature = self.output(feature)
         return feature
 
-    def train_model(self,features,labels,test_feature,test_labels,eta, epochs,batch_size):
-        class_counts = torch.bincount(labels.long())
-        class_weights = 1.0 / class_counts.float()
-        weight_tensor = class_weights[labels.long()]
-        loss_fn = nn.BCELoss(weight=weight_tensor)
-        optimizer = optim.Adam(self.parameters(),lr = eta)
+    def train_model(self,features,labels,test_feature,test_labels,eta, epochs,batch_size,decay):
+        labels_int = labels.view(-1).long()
+        class_counts = torch.bincount(labels_int)
+        weight = torch.tensor([class_counts[0].float()/class_counts[1].float()])
+        loss_fn = nn.BCEWithLogitsLoss(pos_weight=weight)
+        optimizer = optim.Adam(self.parameters(),lr = eta,weight_decay=decay)
         batch_start = torch.arange(0,len(features),batch_size)
 
         best_acc = -np.inf
@@ -43,8 +45,8 @@ class NNModel(nn.Module):
                 for start in progress:
                     feature_batch = features[start:start+batch_size]
                     labels_batch = labels[start:start+batch_size]
-                    preds = self(feature_batch)
-                    loss = loss_fn(preds,labels_batch.float())
+                    preds = torch.sigmoid(self(feature_batch))
+                    loss = loss_fn(self(feature_batch),labels_batch.float())
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
@@ -62,7 +64,7 @@ class NNModel(nn.Module):
             curr_val_feature = curr_val_feature[:num_to_val]
             curr_val_labels = curr_val_labels[:num_to_val]
 
-            preds = self(curr_val_feature)
+            preds = torch.sigmoid(self(curr_val_feature))
             accuracy = (preds.round() == curr_val_labels).float().mean()
             accuracy = float(accuracy)
             if accuracy > best_acc:
