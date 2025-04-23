@@ -8,5 +8,10 @@ version = "0.0.1"
 description = "Dota 2 match outcome prediction"
 
 
-[tool.setuptools.packages.find]
-where = ["dota2_predictor"]
+# Explicitly define where the Python files are located
+[tool.setuptools]
+packages = ["dota2_predictor"]
+
+# This will include any .py files in the package
+[tool.setuptools.package-data]
+"*" = ["*.py"]
