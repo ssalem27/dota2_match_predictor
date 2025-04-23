@@ -1,3 +1,12 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "dota2_predictor"
 version = "0.0.1"
+description = "Dota 2 match outcome prediction"
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
