@@ -6,70 +6,99 @@ import numpy as np
 import tqdm
 import sklearn.utils
 
+from dota2_predictor.models.embedder import HeroEmbeddings, TeamComp
+
 
 
 class NNModel(nn.Module):
-    def __init__(self,input_dim):
+    def __init__(self,hero_dim,attn_num,proj_dim,h_out_dim,t_out_dim,lin_dim):
         super().__init__()
-        self.hidden = nn.Linear(input_dim,3*input_dim)
+        self.hero = HeroEmbeddings(hero_dim,proj_dim,h_out_dim)
+        self.team = TeamComp(h_out_dim,attn_num,t_out_dim)
+        self.hidden1 = nn.Linear(t_out_dim,lin_dim)
+        self.bmorm1 = nn.BatchNorm1d(lin_dim)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout()
-        self.output = nn.Linear(3*input_dim,1)
-        self.sigmoid = nn.Sigmoid()
+        self.output = nn.Linear(lin_dim,1)
+        self.h_out_dim = h_out_dim
         
-    def forward(self,feature):
-        feature = self.relu(self.hidden(feature))
+    def forward(self,p_attrs,a_types,role_i,float_stats):
+        heros = self.hero(p_attrs,a_types,role_i,float_stats)
+        batch_size = heros.shape[0]//10
+        heros = heros.view(batch_size,10,self.h_out_dim)
+        matches = self.team(heros)
+        feature = self.hidden1(matches)
+        feature = self.bmorm1(feature)
+        feature = self.relu(feature)
         feature = self.dropout(feature)
         feature = self.output(feature)
-        return feature
+        return feature.squeeze(1)
 
-    def train_model(self,features,labels,test_feature,test_labels,eta, epochs,batch_size,decay):
+    def train_model(self,features,labels,test_feature,test_labels,eta, epochs,batch_size,decay,early_stop):
+        count_no_change = 0
         labels_int = labels.view(-1).long()
         class_counts = torch.bincount(labels_int)
         weight = torch.tensor([class_counts[0].float()/class_counts[1].float()])
         loss_fn = nn.BCEWithLogitsLoss(pos_weight=weight)
         optimizer = optim.Adam(self.parameters(),lr = eta,weight_decay=decay)
-        batch_start = torch.arange(0,len(features),batch_size)
+        sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,T_max=epochs)
+        batch_start = torch.arange(0,len(features[0]),batch_size)
 
-        best_acc = -np.inf
+        best_loss = np.inf
         best_weights = None
 
         logloss = []
-        loss_01 = []
+        acc_list = []
+        train_loss = []
+        train_accuracy = []
 
         for i in range(epochs):
             self.train()
+            avg_train_loss = []
+            avg_train_acc = []
 
             with tqdm.tqdm(batch_start,unit="batch",mininterval=0,disable=False) as progress:
                 progress.set_description(f"Epoch {i}")
                 for start in progress:
-                    feature_batch = features[start:start+batch_size]
+                    batch_pattr = features[0][start:start+batch_size*10]
+                    batch_atype = features[1][start:start+batch_size*10]
+                    roles = features[2][start:start+batch_size*10]
+                    batch_stats = features[3][start:start+batch_size*10]                 
                     labels_batch = labels[start:start+batch_size]
-                    preds = torch.sigmoid(self(feature_batch))
-                    loss = loss_fn(self(feature_batch),labels_batch.float())
+                    logits = self(batch_pattr,batch_atype,roles,batch_stats)
+                    preds = torch.sigmoid(logits)
+                    loss = loss_fn(logits,labels_batch.float())
+                    avg_train_loss.append(loss.item())
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
                     accuracy = (preds.round() == labels_batch).float().mean()
-
-                    lgloss = -torch.mean(labels_batch * torch.log(preds + 1e-9) + (1 - labels_batch) * torch.log(1 - preds + 1e-9))
-                    logloss.append(lgloss)
-                    loss_01.append(accuracy)
-
+                    avg_train_acc.append(float(accuracy))
                     progress.set_postfix(loss=float(loss),accuracy=float(accuracy))
             
             self.eval()
-            curr_val_feature, curr_val_labels = sklearn.utils.shuffle(test_feature,test_labels,random_state = i)
-            num_to_val = np.random.randint(len(curr_val_feature))
-            curr_val_feature = curr_val_feature[:num_to_val]
-            curr_val_labels = curr_val_labels[:num_to_val]
-
-            preds = torch.sigmoid(self(curr_val_feature))
-            accuracy = (preds.round() == curr_val_labels).float().mean()
-            accuracy = float(accuracy)
-            if accuracy > best_acc:
-                best_acc = accuracy
+            with torch.no_grad():
+                test_pattr = test_feature[0]
+                test_atype = test_feature[1]
+                test_roles = test_feature[2]
+                test_stats = test_feature[3]
+                test_logtis = self(test_pattr,test_atype,test_roles,test_stats)
+                test_preds = torch.sigmoid(test_logtis)
+                test_accuracy = (test_preds.round() == test_labels).float().mean().item()
+                test_loss = loss_fn(test_logtis,test_labels.float()).item()
+                sched.step()
+            logloss.append(test_loss)
+            acc_list.append(float(test_accuracy))
+            train_accuracy.append(np.average(avg_train_acc))
+            train_loss.append(np.average(avg_train_loss))
+            if test_loss < best_loss:
+                best_loss = test_loss
                 best_weights = copy.deepcopy(self.state_dict())
+                count_no_change = 0
+            else:
+                count_no_change += 1
+                if(count_no_change>=early_stop):
+                    break
         
         self.load_state_dict(best_weights)
-        return best_acc,logloss,loss_01
+        return best_loss,logloss,acc_list,train_accuracy,train_loss
