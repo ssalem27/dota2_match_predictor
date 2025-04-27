@@ -11,10 +11,10 @@ from dota2_predictor.models.embedder import HeroEmbeddings, TeamComp
 
 
 class NNModel(nn.Module):
-    def __init__(self,hero_dim,attn_num,proj_dim,h_out_dim,t_out_dim,lin_dim):
+    def __init__(self,hero_dim,attn_num,t_out_dim,lin_dim):
         super().__init__()
-        self.hero = HeroEmbeddings(hero_dim,proj_dim,h_out_dim)
-        self.team = TeamComp(h_out_dim,attn_num,t_out_dim)
+        self.hero = HeroEmbeddings(hero_dim)
+        self.team = TeamComp(3*hero_dim+16,attn_num,t_out_dim)
         self.hidden1 = nn.Linear(t_out_dim,lin_dim)
         self.bmorm1 = nn.BatchNorm1d(lin_dim)
         self.relu = nn.ReLU()
@@ -23,7 +23,7 @@ class NNModel(nn.Module):
         self.bmorm2 = nn.BatchNorm1d(lin_dim//2)
         self.dropout2 = nn.Dropout()
         self.output = nn.Linear(lin_dim//2,1)
-        self.h_out_dim = h_out_dim
+        self.h_out_dim = 3*hero_dim+16
         
     def forward(self,p_attrs,a_types,role_i,float_stats):
         heros = self.hero(p_attrs,a_types,role_i,float_stats)
