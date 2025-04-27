@@ -3,3 +3,4 @@ venv/
 */__pycache__/
 dota2_predictor/dota2_predictor.egg-info
 .DS_STORE
+dota2_predictor.egg-info

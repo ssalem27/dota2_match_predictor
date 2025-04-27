@@ -19,7 +19,10 @@ class NNModel(nn.Module):
         self.bmorm1 = nn.BatchNorm1d(lin_dim)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout()
-        self.output = nn.Linear(lin_dim,1)
+        self.hidden2 = nn.Linear(lin_dim,lin_dim//2)
+        self.bmorm2 = nn.BatchNorm1d(lin_dim//2)
+        self.dropout2 = nn.Dropout()
+        self.output = nn.Linear(lin_dim//2,1)
         self.h_out_dim = h_out_dim
         
     def forward(self,p_attrs,a_types,role_i,float_stats):
@@ -29,6 +32,10 @@ class NNModel(nn.Module):
         matches = self.team(heros)
         feature = self.hidden1(matches)
         feature = self.bmorm1(feature)
+        feature = self.relu(feature)
+        feature = self.dropout(feature)
+        feature = self.hidden2(feature)
+        feature = self.bmorm2(feature)
         feature = self.relu(feature)
         feature = self.dropout(feature)
         feature = self.output(feature)
@@ -79,6 +86,8 @@ class NNModel(nn.Module):
                     batch_stats = features[3][start*10:end*10]              
                     labels_batch = labels[start:start+batch_size]
                     logits = self(batch_pattr,batch_atype,roles,batch_stats)
+                    labels_batch_smoothed = labels_batch.float()*(1.0-0.05)+0.5*0.05
+                    loss = loss_fn(logits,labels_batch_smoothed)
                     preds = torch.sigmoid(logits)
                     loss = loss_fn(logits,labels_batch.float())
                     avg_train_loss.append(loss.item())
