@@ -13,7 +13,7 @@ from dota2_predictor.models.embedder import HeroEmbeddings
 class NNModel(nn.Module):
     def __init__(self,hero_dim,lin_dim):
         super().__init__()
-        self.h_out_dim = 3*hero_dim+16+1
+        self.h_out_dim = 3*hero_dim+22+1
         self.hero = HeroEmbeddings(hero_dim)
         self.hidden1 = nn.Linear(10*self.h_out_dim,lin_dim)
         self.bmorm1 = nn.BatchNorm1d(lin_dim)
