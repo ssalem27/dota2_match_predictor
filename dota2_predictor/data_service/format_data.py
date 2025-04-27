@@ -2,7 +2,7 @@ from dota2_predictor.data_service.build_db import get_saved_matches
 import numpy as np
 import dota2_predictor.data_service.consts as consts
 import torch
-from dota2_predictor.models.embedder import HeroEmbeddings, TeamComp
+from dota2_predictor.models.embedder import HeroEmbeddings
 from sklearn.preprocessing import StandardScaler
 
 

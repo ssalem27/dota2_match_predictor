@@ -6,30 +6,30 @@ import numpy as np
 import tqdm
 import sklearn.utils
 
-from dota2_predictor.models.embedder import HeroEmbeddings, TeamComp
+from dota2_predictor.models.embedder import HeroEmbeddings
 
 
 
 class NNModel(nn.Module):
-    def __init__(self,hero_dim,attn_num,t_out_dim,lin_dim):
+    def __init__(self,hero_dim,lin_dim):
         super().__init__()
+        self.h_out_dim = 3*hero_dim+16+1
         self.hero = HeroEmbeddings(hero_dim)
-        self.team = TeamComp(3*hero_dim+16,attn_num,t_out_dim)
-        self.hidden1 = nn.Linear(t_out_dim,lin_dim)
+        self.hidden1 = nn.Linear(10*self.h_out_dim,lin_dim)
         self.bmorm1 = nn.BatchNorm1d(lin_dim)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout()
+        self.dropout = nn.Dropout(p=0.3)
         self.hidden2 = nn.Linear(lin_dim,lin_dim//2)
         self.bmorm2 = nn.BatchNorm1d(lin_dim//2)
-        self.dropout2 = nn.Dropout()
+        self.dropout2 = nn.Dropout(p=0.3)
         self.output = nn.Linear(lin_dim//2,1)
-        self.h_out_dim = 3*hero_dim+16
+
         
     def forward(self,p_attrs,a_types,role_i,float_stats):
         heros = self.hero(p_attrs,a_types,role_i,float_stats)
         batch_size = heros.shape[0]//10
         heros = heros.view(batch_size,10,self.h_out_dim)
-        matches = self.team(heros)
+        matches = heros.view(batch_size, -1)
         feature = self.hidden1(matches)
         feature = self.bmorm1(feature)
         feature = self.relu(feature)
@@ -47,16 +47,8 @@ class NNModel(nn.Module):
         class_counts = torch.bincount(labels_int)
         weight = torch.tensor([class_counts[0].float()/class_counts[1].float()])
         loss_fn = nn.BCEWithLogitsLoss(pos_weight=weight)
-        optimizer = optim.Adam([{"params":self.hero.parameters(),"lr":eta*0.5},
-                                {"params":self.team.parameters(),"lr":eta*1.5},
-                                {"params":self.hidden1.parameters()},
-                                {"params":self.bmorm1.parameters()},
-                                {"params":self.output.parameters()}
-                                ],
-                               lr = eta,weight_decay=decay)
-        for param in self.hero.parameters():
-            param.requires_grad = False
-        sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,T_max=epochs)
+        optimizer = optim.Adam(self.parameters(),lr = eta,weight_decay=decay)
+        # sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,T_max=epochs)
         batch_start = torch.arange(0,len(labels),batch_size)
 
         best_loss = np.inf
@@ -66,16 +58,10 @@ class NNModel(nn.Module):
         acc_list = []
         train_loss = []
         train_accuracy = []
-        unfroze = False
         for i in range(epochs):
             self.train()
             avg_train_loss = []
             avg_train_acc = []
-
-            if not unfroze and i >= 50:
-                for param in self.hero.parameters():
-                    param.requires_grad = True
-
             with tqdm.tqdm(batch_start,unit="batch",mininterval=0,disable=False) as progress:
                 progress.set_description(f"Epoch {i}")
                 for start in progress:
@@ -89,7 +75,6 @@ class NNModel(nn.Module):
                     labels_batch_smoothed = labels_batch.float()*(1.0-0.05)+0.5*0.05
                     loss = loss_fn(logits,labels_batch_smoothed)
                     preds = torch.sigmoid(logits)
-                    loss = loss_fn(logits,labels_batch.float())
                     avg_train_loss.append(loss.item())
                     optimizer.zero_grad()
                     loss.backward()
@@ -108,7 +93,7 @@ class NNModel(nn.Module):
                 test_preds = torch.sigmoid(test_logtis)
                 test_accuracy = (test_preds.round() == test_labels).float().mean().item()
                 test_loss = loss_fn(test_logtis,test_labels.float()).item()
-                sched.step()
+                # sched.step()
             logloss.append(test_loss)
             acc_list.append(float(test_accuracy))
             train_accuracy.append(np.average(avg_train_acc))
