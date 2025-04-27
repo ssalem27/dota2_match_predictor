@@ -21,18 +21,29 @@ class HeroEmbeddings(nn.Module):
         hero = torch.cat([pa_embed,attack_embed,role_embed,stats_embed],dim=1)
         hero = self.combine(hero)
         return hero
-    
+
 class TeamComp(nn.Module):
     def __init__(self,embedding_dim,num_attention,output_dim):
         super().__init__()
-        self.attention = nn.MultiheadAttention(embed_dim=embedding_dim,num_heads=num_attention,batch_first=True)
-        self.output = nn.Linear(embedding_dim,output_dim)
+        self.attention1 = nn.MultiheadAttention(embed_dim=embedding_dim,num_heads=num_attention,batch_first=True)
+        self.attention2 = nn.MultiheadAttention(embed_dim=embedding_dim,num_heads=num_attention,batch_first=True)
+        self.norm1 = nn.LayerNorm(embedding_dim)
+        self.norm2 = nn.LayerNorm(embedding_dim)
+        self.output = nn.Sequential(
+            nn.Linear(embedding_dim, embedding_dim),
+            nn.ReLU(),
+            nn.Linear(embedding_dim, embedding_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(embedding_dim // 2, output_dim),
+        )
 
     def forward(self,hero_picks):
-        attn_weigh, _ = self.attention(hero_picks,hero_picks)
-        team = attn_weigh.mean(dim=1)
+        attn1, _ = self.attention1(hero_picks,hero_picks,hero_picks)
+        attn1= self.norm1(attn1+hero_picks)
+
+        attn2, _ =self.attention2(attn1,attn1,attn1)
+        attn2 = self.norm2(attn2+attn1)
+        team = attn2.mean(dim=1)
         match = self.output(team)
         return match
-    
-
-

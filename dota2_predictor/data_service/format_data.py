@@ -95,4 +95,4 @@ def extract_features(entries,hero_table):
             features[1].append(hero_table[h][1])
             features[2].extend(hero_table[h][2])
             features[3].extend(hero_table[h][3])
-    return [torch.tensor(features[0]).float(),torch.tensor(features[1]).float(),torch.tensor(features[2],dtype=torch.float32).view(-1,8),torch.tensor(features[3],dtype=torch.float32).view(-1,22)]
+    return [torch.tensor(features[0]),torch.tensor(features[1]),torch.tensor(features[2],dtype=torch.float32).view(-1,8),torch.tensor(features[3],dtype=torch.float32).view(-1,22)]

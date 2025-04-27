@@ -40,9 +40,17 @@ class NNModel(nn.Module):
         class_counts = torch.bincount(labels_int)
         weight = torch.tensor([class_counts[0].float()/class_counts[1].float()])
         loss_fn = nn.BCEWithLogitsLoss(pos_weight=weight)
-        optimizer = optim.Adam(self.parameters(),lr = eta,weight_decay=decay)
+        optimizer = optim.Adam([{"params":self.hero.parameters(),"lr":eta*0.5},
+                                {"params":self.team.parameters(),"lr":eta*1.5},
+                                {"params":self.hidden1.parameters()},
+                                {"params":self.bmorm1.parameters()},
+                                {"params":self.output.parameters()}
+                                ],
+                               lr = eta,weight_decay=decay)
+        for param in self.hero.parameters():
+            param.requires_grad = False
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,T_max=epochs)
-        batch_start = torch.arange(0,len(features[0]),batch_size)
+        batch_start = torch.arange(0,len(labels),batch_size)
 
         best_loss = np.inf
         best_weights = None
@@ -51,19 +59,24 @@ class NNModel(nn.Module):
         acc_list = []
         train_loss = []
         train_accuracy = []
-
+        unfroze = False
         for i in range(epochs):
             self.train()
             avg_train_loss = []
             avg_train_acc = []
 
+            if not unfroze and i >= 50:
+                for param in self.hero.parameters():
+                    param.requires_grad = True
+
             with tqdm.tqdm(batch_start,unit="batch",mininterval=0,disable=False) as progress:
                 progress.set_description(f"Epoch {i}")
                 for start in progress:
-                    batch_pattr = features[0][start:start+batch_size*10]
-                    batch_atype = features[1][start:start+batch_size*10]
-                    roles = features[2][start:start+batch_size*10]
-                    batch_stats = features[3][start:start+batch_size*10]                 
+                    end = start+batch_size
+                    batch_pattr = features[0][start*10:end*10]
+                    batch_atype = features[1][start*10:end*10]
+                    roles = features[2][start*10:end*10]
+                    batch_stats = features[3][start*10:end*10]              
                     labels_batch = labels[start:start+batch_size]
                     logits = self(batch_pattr,batch_atype,roles,batch_stats)
                     preds = torch.sigmoid(logits)
