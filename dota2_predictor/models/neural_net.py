@@ -6,38 +6,38 @@ import numpy as np
 import tqdm
 import sklearn.utils
 
-from dota2_predictor.models.embedder import HeroEmbeddings
 
 
 
 class NNModel(nn.Module):
-    def __init__(self,hero_dim,lin_dim):
+    def __init__(self,match_dim,lin_dim):
         super().__init__()
-        self.h_out_dim = 3*hero_dim+22+1
-        self.hero = HeroEmbeddings(hero_dim)
-        self.hidden1 = nn.Linear(10*self.h_out_dim,lin_dim)
+        self.hidden1 = nn.Linear(2*37*5,lin_dim)
         self.bmorm1 = nn.BatchNorm1d(lin_dim)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(p=0.3)
-        self.hidden2 = nn.Linear(lin_dim,lin_dim//2)
-        self.bmorm2 = nn.BatchNorm1d(lin_dim//2)
-        self.dropout2 = nn.Dropout(p=0.3)
-        self.output = nn.Linear(lin_dim//2,1)
+        self.radiant_attn = nn.Linear(37,5)
+        self.dire_attn = nn.Linear(37,5)
+        # self.dropout = nn.Dropout(p=0.3)
+        # self.hidden2 = nn.Linear(lin_dim,lin_dim//2)
+        # self.bmorm2 = nn.BatchNorm1d(lin_dim//2)
+        # self.dropout2 = nn.Dropout(p=0.3)
+        self.output = nn.Linear(lin_dim,1)
 
         
-    def forward(self,p_attrs,a_types,role_i,float_stats):
-        heros = self.hero(p_attrs,a_types,role_i,float_stats)
-        batch_size = heros.shape[0]//10
-        heros = heros.view(batch_size,10,self.h_out_dim)
-        matches = heros.view(batch_size, -1)
-        feature = self.hidden1(matches)
+    def forward(self,feature):
+        feature = feature.view(feature.shape[0],10,37)
+        radiant = feature[:,:5,:]
+        dire = feature[:,5:,:]
+        radiant_score = self.radiant_attn(radiant)
+        radiant_w = torch.softmax(radiant_score,dim=1)
+        dire_score = self.dire_attn(dire)
+        dire_w = torch.softmax(dire_score,dim=1)
+        radiant = (radiant.unsqueeze(3)*radiant_w.unsqueeze(2)).sum(dim=1).flatten(start_dim=1)
+        dire = (dire.unsqueeze(3)*dire_w.unsqueeze(2)).sum(dim=1).flatten(start_dim=1)
+        feature = torch.cat([radiant,dire],dim=1)
+        feature = self.hidden1(feature)
         feature = self.bmorm1(feature)
         feature = self.relu(feature)
-        feature = self.dropout(feature)
-        feature = self.hidden2(feature)
-        feature = self.bmorm2(feature)
-        feature = self.relu(feature)
-        feature = self.dropout(feature)
         feature = self.output(feature)
         return feature.squeeze(1)
 
@@ -46,12 +46,12 @@ class NNModel(nn.Module):
         labels_int = labels.view(-1).long()
         class_counts = torch.bincount(labels_int)
         weight = torch.tensor([class_counts[0].float()/class_counts[1].float()])
-        loss_fn = nn.BCEWithLogitsLoss(pos_weight=weight)
+        loss_fn = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(self.parameters(),lr = eta,weight_decay=decay)
         # sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,T_max=epochs)
         batch_start = torch.arange(0,len(labels),batch_size)
 
-        best_loss = np.inf
+        best_loss = -np.inf
         best_weights = None
 
         logloss = []
@@ -66,12 +66,9 @@ class NNModel(nn.Module):
                 progress.set_description(f"Epoch {i}")
                 for start in progress:
                     end = start+batch_size
-                    batch_pattr = features[0][start*10:end*10]
-                    batch_atype = features[1][start*10:end*10]
-                    roles = features[2][start*10:end*10]
-                    batch_stats = features[3][start*10:end*10]              
-                    labels_batch = labels[start:start+batch_size]
-                    logits = self(batch_pattr,batch_atype,roles,batch_stats)
+                    batch_features = features[start:end]            
+                    labels_batch = labels[start:end]
+                    logits = self(batch_features)
                     labels_batch_smoothed = labels_batch.float()*(1.0-0.05)+0.5*0.05
                     loss = loss_fn(logits,labels_batch_smoothed)
                     preds = torch.sigmoid(logits)
@@ -85,11 +82,7 @@ class NNModel(nn.Module):
             
             self.eval()
             with torch.no_grad():
-                test_pattr = test_feature[0]
-                test_atype = test_feature[1]
-                test_roles = test_feature[2]
-                test_stats = test_feature[3]
-                test_logtis = self(test_pattr,test_atype,test_roles,test_stats)
+                test_logtis = self(test_feature)
                 test_preds = torch.sigmoid(test_logtis)
                 test_accuracy = (test_preds.round() == test_labels).float().mean().item()
                 test_loss = loss_fn(test_logtis,test_labels.float()).item()
@@ -98,8 +91,8 @@ class NNModel(nn.Module):
             acc_list.append(float(test_accuracy))
             train_accuracy.append(np.average(avg_train_acc))
             train_loss.append(np.average(avg_train_loss))
-            if test_loss < best_loss:
-                best_loss = test_loss
+            if test_accuracy > best_loss:
+                best_loss = test_accuracy
                 best_weights = copy.deepcopy(self.state_dict())
                 count_no_change = 0
             else:

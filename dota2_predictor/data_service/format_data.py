@@ -2,7 +2,6 @@ from dota2_predictor.data_service.build_db import get_saved_matches
 import numpy as np
 import dota2_predictor.data_service.consts as consts
 import torch
-from dota2_predictor.models.embedder import HeroEmbeddings
 from sklearn.preprocessing import StandardScaler
 
 
@@ -20,17 +19,9 @@ role_map = {
 
 
 
-attribute_map = {
-    "agi":0,
-    "str":1,
-    "int":2,
-    "all":3
-}
+attributes = ["str","agi","int"]
+attack_type = ["Melee","Ranged"]
 
-a_type_map = {
-    "Melee": 0,
-    "Ranged": 1
-}
 
 stats_keys = [
     "base_health",
@@ -59,40 +50,40 @@ stats_keys = [
 
 
 def get_hero_table():
-    stats_list = [[i[s] for s in stats_keys] for i in consts.HEROES_LIST]
-    roles_list = [h["roles"] for h in consts.HEROES_LIST]
+    one_hots = []
+    all_hero_stats = []
+    ids = []
+    for hero in consts.HEROES_LIST:
+        p_attr = [1 if hero["primary_attr"] == a else 0 for a in attributes]
+        a_type = [1 if hero["attack_type"] == a else 0 for a in attack_type]
+        roles = [0]*8
+        for i in hero["roles"]:
+            roles[role_map[i]] = 1
 
-    one_hot_roles = []
-    for i in roles_list:
-        roles = [0,0,0,0,0,0,0,0]
-        for r in i:
-            roles[role_map[r]]=1 
-        one_hot_roles.append(roles)
+        stats = [hero[i] for i in stats_keys]
+        stats.append(hero["pub_pick"]/hero["pub_win"])
+        
+        one_hots.append(p_attr+a_type+roles)
+        all_hero_stats.append(stats)
+        ids.append(hero["id"])
     
-    normalizer = StandardScaler(copy=False)
-    stats_list = normalizer.fit_transform(stats_list)
-    return dict([
-        (
-            i["id"], 
-                [attribute_map[i["primary_attr"]], 
-                a_type_map[i["attack_type"]],
-                one_hot_roles[z],
-                stats_list[z]]
-            )
-        for z,i in enumerate(consts.HEROES_LIST)
-    ])
+    all_hero_stats = np.array(all_hero_stats)
+    normalizer = StandardScaler()
+    all_hero_stats = normalizer.fit_transform(all_hero_stats)
+
+    hero_table = dict([(id,one_hots[i]+all_hero_stats[i].tolist())for i,id in enumerate(ids)])
+    return hero_table
+    
+
 
 def extract_features(entries,hero_table):
-    features = [[],[],[],[]]
+    features = []
     for i in entries:
+        match = []
         for h in i["radiant_team"]:
-            features[0].append(hero_table[h][0])
-            features[1].append(hero_table[h][1])
-            features[2].extend(hero_table[h][2])
-            features[3].extend(hero_table[h][3])
+            match.extend(hero_table[h]+[0])
         for h in i["dire_team"]:
-            features[0].append(hero_table[h][0])
-            features[1].append(hero_table[h][1])
-            features[2].extend(hero_table[h][2])
-            features[3].extend(hero_table[h][3])
-    return [torch.tensor(features[0]),torch.tensor(features[1]),torch.tensor(features[2],dtype=torch.float32).view(-1,8),torch.tensor(features[3],dtype=torch.float32).view(-1,22)]
+            match.extend(hero_table[h]+[1])
+        features.append(match)
+    return torch.tensor(features,dtype=torch.float32)
+
