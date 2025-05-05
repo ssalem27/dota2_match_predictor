@@ -17,29 +17,26 @@ class NNModel(nn.Module):
         self.relu = nn.ReLU()
         self.radiant_attn = nn.Linear(37,5)
         self.dire_attn = nn.Linear(37,5)
-        # self.dropout = nn.Dropout(p=0.3)
-        # self.hidden2 = nn.Linear(lin_dim,lin_dim//2)
-        # self.bmorm2 = nn.BatchNorm1d(lin_dim//2)
-        # self.dropout2 = nn.Dropout(p=0.3)
         self.output = nn.Linear(lin_dim,1)
 
         
     def forward(self,feature):
-        feature = feature.view(feature.shape[0],10,37)
-        radiant = feature[:,:5,:]
-        dire = feature[:,5:,:]
-        radiant_score = self.radiant_attn(radiant)
-        radiant_w = torch.softmax(radiant_score,dim=1)
-        dire_score = self.dire_attn(dire)
+        feature = feature.view(feature.shape[0],10,37) #reshape batch into tensor (batch_size,num_heros,emb_dim)
+        radiant = feature[:,:5,:] #extract team1
+        dire = feature[:,5:,:] #extract team2
+        radiant_score = self.radiant_attn(radiant) #compute team1 attention
+        radiant_w = torch.softmax(radiant_score,dim=1) 
+        dire_score = self.dire_attn(dire) #compute team2 attention
         dire_w = torch.softmax(dire_score,dim=1)
-        radiant = (radiant.unsqueeze(3)*radiant_w.unsqueeze(2)).sum(dim=1).flatten(start_dim=1)
-        dire = (dire.unsqueeze(3)*dire_w.unsqueeze(2)).sum(dim=1).flatten(start_dim=1)
-        feature = torch.cat([radiant,dire],dim=1)
-        feature = self.hidden1(feature)
+        radiant = (radiant.unsqueeze(3)*radiant_w.unsqueeze(2)).sum(dim=1).flatten(start_dim=1) #apply attention to team1 vector
+        dire = (dire.unsqueeze(3)*dire_w.unsqueeze(2)).sum(dim=1).flatten(start_dim=1) #apply attention to team2 vector
+        feature = torch.cat([radiant,dire],dim=1) #concatenate team vectors
+        #begin forward pass
+        feature = self.hidden1(feature) 
         feature = self.bmorm1(feature)
         feature = self.relu(feature)
         feature = self.output(feature)
-        return feature.squeeze(1)
+        return feature.squeeze(1) #reshape output to loss function input
 
     def train_model(self,features,labels,test_feature,test_labels,eta, epochs,batch_size,decay,early_stop):
         count_no_change = 0
