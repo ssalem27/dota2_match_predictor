@@ -5,6 +5,7 @@ import torch.optim as optim
 import numpy as np
 import tqdm
 import sklearn.utils
+from pathlib import Path
 
 
 
@@ -99,3 +100,13 @@ class NNModel(nn.Module):
         
         self.load_state_dict(best_weights)
         return best_loss,logloss,acc_list,train_accuracy,train_loss
+
+    def save(self, path: str):
+        torch.save(self.state_dict(), path)
+
+    @classmethod
+    def load(cls, path: str, match_dim: int, lin_dim: int) -> "NNModel":
+        instance = cls(match_dim=match_dim, lin_dim=lin_dim)
+        instance.load_state_dict(torch.load(path, weights_only=True))
+        instance.eval()
+        return instance

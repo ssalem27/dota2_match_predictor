@@ -1,3 +1,4 @@
+import pickle
 import sklearn
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import log_loss,zero_one_loss
@@ -30,5 +31,16 @@ class LGModel():
 
     def predict(self,features):
         return self.model.predict(features)
+
+    def save(self, path: str):
+        with open(path, "wb") as f:
+            pickle.dump(self.model, f)
+
+    @classmethod
+    def load(cls, path: str) -> "LGModel":
+        instance = cls()
+        with open(path, "rb") as f:
+            instance.model = pickle.load(f)
+        return instance
 
 
