@@ -35,7 +35,7 @@ OpenDota API  →  MongoDB  →  Feature Extraction  →  Model Training
 
 | Model | Baseline (always predict Radiant) | Test Accuracy |
 |---|---|---|
-| Logistic Regression | ~54% | ~62% |
+| Logistic Regression | ~54% | ~61% |
 | Neural Network (attention) | ~54% | **~66%** |
 
 The ~54% baseline reflects Radiant's slight structural win-rate advantage on public servers. Beating it by 12 points using only draft composition is meaningful given the information available.

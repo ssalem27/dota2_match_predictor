@@ -49,7 +49,7 @@ class NNModel(nn.Module):
         # sched = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,T_max=epochs)
         batch_start = torch.arange(0,len(labels),batch_size)
 
-        best_loss = -np.inf
+        best_val_acc = -np.inf
         best_weights = None
 
         logloss = []
@@ -64,7 +64,7 @@ class NNModel(nn.Module):
                 progress.set_description(f"Epoch {i}")
                 for start in progress:
                     end = start+batch_size
-                    batch_features = features[start:end]            
+                    batch_features = features[start:end]
                     labels_batch = labels[start:end]
                     logits = self(batch_features)
                     labels_batch_smoothed = labels_batch.float()*(1.0-0.05)+0.5*0.05
@@ -77,7 +77,7 @@ class NNModel(nn.Module):
                     accuracy = (preds.round() == labels_batch).float().mean()
                     avg_train_acc.append(float(accuracy))
                     progress.set_postfix(loss=float(loss),accuracy=float(accuracy))
-            
+
             self.eval()
             with torch.no_grad():
                 test_logtis = self(test_feature)
@@ -89,17 +89,17 @@ class NNModel(nn.Module):
             acc_list.append(float(test_accuracy))
             train_accuracy.append(np.average(avg_train_acc))
             train_loss.append(np.average(avg_train_loss))
-            if test_accuracy > best_loss:
-                best_loss = test_accuracy
+            if test_accuracy > best_val_acc:
+                best_val_acc = test_accuracy
                 best_weights = copy.deepcopy(self.state_dict())
                 count_no_change = 0
             else:
                 count_no_change += 1
                 if(count_no_change>=early_stop):
                     break
-        
+
         self.load_state_dict(best_weights)
-        return best_loss,logloss,acc_list,train_accuracy,train_loss
+        return best_val_acc,logloss,acc_list,train_accuracy,train_loss
 
     def save(self, path: str):
         torch.save(self.state_dict(), path)
